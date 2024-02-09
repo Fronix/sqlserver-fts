@@ -1,25 +1,27 @@
-# As of August 2023, I believe this is the current version of SQL Server available for use
-FROM mcr.microsoft.com/mssql/server:2022-latest
+# Based on https://gist.github.com/pbthorste/2dd302939ad84ab26932e9e18b7428d8
+# Docker image with msssql 2022 with full text search enabled
+# based on work in: https://github.com/Microsoft/mssql-docker
 
-# Switch to root to install fulltext - apt-get won't work unless you switch users!
-USER root
+# Base OS layer: Latest Ubuntu LTS
+FROM --platform=linux/amd64 ubuntu:focal
 
-# Install dependencies - these are required to make changes to apt-get below
-RUN apt-get update
-RUN apt-get install -yq gnupg gnupg2 gnupg1 curl apt-transport-https
-
-# Install SQL Server package links - why aren't these already embedded in the image?  How weird.
-RUN curl https://packages.microsoft.com/keys/microsoft.asc -o /var/opt/mssql/ms-key.cer
-RUN apt-key add /var/opt/mssql/ms-key.cer
-RUN curl https://packages.microsoft.com/config/ubuntu/20.04/mssql-server-2022.list -o /etc/apt/sources.list.d/mssql-server-2022.list
-RUN apt-get update
-
-# Install SQL Server full-text-search - this only works if you add the packages references into apt-get above
-RUN apt-get install -y mssql-server-fts
-
-# Cleanup
-RUN apt-get clean
-RUN rm -rf /var/lib/apt/lists
+# Install prerequistes since it is needed to get repo config for SQL server
+RUN export DEBIAN_FRONTEND=noninteractive && \
+    apt-get update && \
+    apt-get install -yq curl apt-transport-https gnupg && \
+    # Get official Microsoft repository configuration
+    curl https://packages.microsoft.com/keys/microsoft.asc | apt-key add - && \
+    curl https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb --output packages-microsoft-prod.deb && dpkg -i packages-microsoft-prod.deb && \
+    curl https://packages.microsoft.com/config/ubuntu/20.04/mssql-server-2022.list | tee /etc/apt/sources.list.d/mssql-server.list && \
+    apt-get update  && \
+    # Install SQL Server from apt
+    apt-get install -y mssql-server && \
+    # Install optional packages
+    apt-get install -y mssql-server-fts && \
+    ACCEPT_EULA=Y apt-get install -y mssql-tools && \
+    # Cleanup the Dockerfile
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists
 
 # Run SQL Server process
-ENTRYPOINT [ "/opt/mssql/bin/sqlservr" ]
+CMD /opt/mssql/bin/sqlservr
